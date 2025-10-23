@@ -37,7 +37,7 @@ Extract IDs if mentioned. Consider the conversation history to maintain context.
     context_messages = [SystemMessage(content=system_msg)]
     
     if messages:
-        recent_messages = messages[-10:] if len(messages) > 10 else messages
+        recent_messages = messages[-15:] if len(messages) > 15 else messages
         context_messages.extend(recent_messages)
     
     context_messages.append(HumanMessage(content=query))
