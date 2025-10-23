@@ -20,10 +20,6 @@ class RouteDecision(BaseModel):
 def orchestrator(state: State) -> dict:
     query = state['customer_query']
     messages = state.get('messages', [])
-
-    max_history=10
-    if len(messages)> max_history:
-        messages=messages[-max_history:]
     
     if messages and state.get('next_action') and state['next_action'] != 'escalation':
         return {}
@@ -41,7 +37,7 @@ Extract IDs if mentioned. Consider the conversation history to maintain context.
     context_messages = [SystemMessage(content=system_msg)]
     
     if messages:
-        recent_messages = messages[-4:] if len(messages) > 4 else messages
+        recent_messages = messages[-10:] if len(messages) > 10 else messages
         context_messages.extend(recent_messages)
     
     context_messages.append(HumanMessage(content=query))
@@ -58,6 +54,9 @@ Extract IDs if mentioned. Consider the conversation history to maintain context.
 
 def sales_node(state: State) -> dict:
     system_msg = """You are a sales support agent. Use available tools to help customers recommend products and answer queries.
+                    Review conversation history carefully to understand context.
+
+CONTEXT: Map informal references to products discussed earlier. Don't ask for info already provided.
 
 Available Tools:
 - search_products: Find products by category/keyword
