@@ -1,7 +1,6 @@
 import os
-import warnings
 from dotenv import load_dotenv
-from agent import graph
+from agent.agent import graph
 from langchain_core.messages import AIMessage
 
 load_dotenv()
@@ -33,18 +32,14 @@ def main():
         
         print("Agent: ", end="", flush=True)
         
-        try:
-            for event in graph.stream(state):
-                for value in event.values():
-                    if 'messages' in value and value['messages']:
-                        last_msg = value['messages'][-1]
-                        if isinstance(last_msg, AIMessage) and last_msg.content:
-                            if not last_msg.tool_calls and 'ESCALATE_TO_HUMAN' not in last_msg.content:
-                                print(last_msg.content)
-                    state.update(value)
-                    
-        except Exception as e:
-            print(f"Error: {e}")
+        for event in graph.stream(state):
+            for value in event.values():
+                if 'messages' in value and value['messages']:
+                    last_msg = value['messages'][-1]
+                    if isinstance(last_msg, AIMessage) and last_msg.content:
+                        if not last_msg.tool_calls and 'ESCALATE_TO_HUMAN' not in last_msg.content:
+                            print(last_msg.content)
+                state.update(value)
         
         print()
 

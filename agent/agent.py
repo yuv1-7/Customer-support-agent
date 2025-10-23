@@ -1,14 +1,14 @@
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
-from utils.state_graph import State
-from utils.nodes import (
+from agent.state import State
+from agent.nodes import (
     orchestrator,
     sales_node,
     tech_support_node,
     order_inquiry_node,
     escalation_node
 )
-from utils.tools import tools
+from agent.tools import tools
 
 def route_query(state: State) -> str:
     return state['next_action']

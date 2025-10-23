@@ -2,8 +2,8 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from pydantic import BaseModel, Field
-from utils.state_graph import State
-from utils.tools import sales_tools, tech_support_tools, order_inquiry_tools
+from agent.state import State
+from agent.tools import sales_tools, tech_support_tools, order_inquiry_tools
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
@@ -49,34 +49,30 @@ Extract IDs if mentioned."""
     }
 
 def sales_node(state: State) -> dict:
-    system_msg = """You are a sales support agent. Use available tools to help customers to recommend a product answer any of their queries..
+    system_msg = """You are a sales support agent. Use available tools to help customers recommend products and answer queries.
 
 Available Tools:
 - search_products: Find products by category/keyword
 - get_product_info: Get detailed product information by product_id
-- get_customer_info: Verify customer exists and get their details using customer_id
-- place_order: Create order for existing customers (requires customer_id, items list, shipping_address)
+- get_customer_info: Verify customer exists using customer_id
+- place_order: Create order (requires customer_id, items list, shipping_address)
 
 ORDER PLACEMENT WORKFLOW:
-1. If customer wants to order a product (whether you recommended it or they requested it):
-   - Ask ONLY for their customer ID if not already provided
-   - Use get_customer_info to verify the customer exists
-2. Once you have a valid customer_id:
-   - Esstablish what product they want to order first. if they dont have anything in mind, give a suggestion as before.
-   - If customer hasn't specified shipping address, ask for it
-   - If they're ordering a product you recommended earlier in conversation, use that product_id
-   - If they mention a product_id, use it directly
-   - Call place_order with: customer_id, items list with product_id and quantity, and shipping_address
-3. For NEW customers (without customer_id):
-   - Respond with: "ESCALATE_TO_HUMAN" and tell them they will be contacted by a representative to assist with account creation.
-Remember:
-- Do NOT ask for email for placing orders - only customer_id is needed
-- If you recommended a product and customer says "I want to order it" or similar, proceed directly with that product id
-- Only ask for missing critical details: customer_id (if not provided) and shipping_address (if not provided)
-- Default quantity to 1 if not specified
-- After placing order successfully, provide order confirmation with order_id
+1. Customer wants to order:
+   - Ask for customer ID if not provided
+   - Use get_customer_info to verify customer exists
+2. Once customer_id verified:
+   - Establish what product they want
+   - If no shipping address, ask for it
+   - Call place_order with customer_id, items, shipping_address
+3. NEW customers without customer_id:
+   - Respond with "ESCALATE_TO_HUMAN"
 
-Provide natural, conversational responses. After helping, ask if they need anything else.
+Remember:
+- Only ask for customer_id and shipping_address
+- Default quantity to 1 if not specified
+- Provide order confirmation with order_id after success
+
 If customer is unsatisfied or wants human support, respond with: "ESCALATE_TO_HUMAN" """
     
     messages = [SystemMessage(content=system_msg)] + state['messages']
@@ -87,14 +83,14 @@ If customer is unsatisfied or wants human support, respond with: "ESCALATE_TO_HU
     return {"messages": [response], "next_action": next_action}
 
 def tech_support_node(state: State) -> dict:
-    system_msg = """You are an expert technical support specialist with deep knowledge of computer hardware and software troubleshooting.
+    system_msg = """You are a technical support specialist.
 
 AVAILABLE TOOLS:
-- get_product_info: Get detailed specifications and information about a product using product_id
-- get_technical_issues: Retrieve known issues and verified solutions for products (can filter by product_id)
+- get_product_info: Get product specifications using product_id
+- get_technical_issues: Get known issues and solutions (filter by product_id)
 
-Provide clear troubleshooting steps one at a time and guide the user toward resolution. Ask if the issue is resolved.
-If customer is unsatisfied, wants human support, fails to resolve issue on its own, or issue requires physical repairs, respond with: "ESCALATE_TO_HUMAN" """
+Provide clear troubleshooting steps. Ask if issue is resolved.
+If customer is unsatisfied, wants human support, or issue requires physical repairs, respond with: "ESCALATE_TO_HUMAN" """
     
     messages = [SystemMessage(content=system_msg)] + state['messages']
     response = llm.bind_tools(tech_support_tools).invoke(messages)
@@ -117,7 +113,6 @@ If customer is unsatisfied or wants human support, respond with: "ESCALATE_TO_HU
     return {"messages": [response], "next_action": next_action}
 
 def escalation_node(state: State) -> dict:
-    #Can be integrated with ticketing system here
     return {
         "messages": [AIMessage(content="Escalating to human support. A representative will contact you shortly.")]
     }
