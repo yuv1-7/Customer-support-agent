@@ -1,6 +1,6 @@
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, BaseMessage
 from pydantic import BaseModel, Field
 from agent.state import State
 from agent.tools import sales_tools, tech_support_tools, order_inquiry_tools
@@ -11,6 +11,12 @@ llm = ChatGoogleGenerativeAI(
     temperature=0.7
 )
 
+MAX_HISTORY_MESSAGES = 20
+def get_recent_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
+    if not messages or len(messages) <= MAX_HISTORY_MESSAGES:
+        return messages
+    return messages[-MAX_HISTORY_MESSAGES:]
+
 class RouteDecision(BaseModel):
     category: str = Field(description="One of: sales, tech_support, order_inquiry, escalation")
     order_id: str | None = None
@@ -20,9 +26,6 @@ class RouteDecision(BaseModel):
 def orchestrator(state: State) -> dict:
     query = state['customer_query']
     messages = state.get('messages', [])
-    
-    if messages and state.get('next_action') and state['next_action'] != 'escalation':
-        return {}
     
     system_msg = """Categorize customer queries based on the CURRENT query and conversation context:
 - sales: Products, pricing, recommendations, placing orders
@@ -37,8 +40,7 @@ Extract IDs if mentioned. Consider the conversation history to maintain context.
     context_messages = [SystemMessage(content=system_msg)]
     
     if messages:
-        recent_messages = messages[-15:] if len(messages) > 15 else messages
-        context_messages.extend(recent_messages)
+        context_messages.extend(get_recent_messages(messages))
     
     context_messages.append(HumanMessage(content=query))
     
@@ -84,8 +86,9 @@ Remember:
 
 If customer is unsatisfied or wants human support, respond exactly with: "ESCALATE_TO_HUMAN" """
     
-    messages = [SystemMessage(content=system_msg)] + state['messages']
-    response = llm.bind_tools(sales_tools).invoke(messages)
+    messages = state.get('messages', [])
+    full_messages = [SystemMessage(content=system_msg)] + get_recent_messages(messages)
+    response = llm.bind_tools(sales_tools).invoke(full_messages)
     
     next_action = 'escalation' if response.content and 'ESCALATE_TO_HUMAN' in response.content else 'sales'
     
@@ -103,8 +106,9 @@ Review the conversation history to understand the full context of the technical 
 Provide clear troubleshooting steps. Ask if issue is resolved.
 If customer is unsatisfied, wants human support, or issue requires physical repairs, respond exactly with: "ESCALATE_TO_HUMAN" """
     
-    messages = [SystemMessage(content=system_msg)] + state['messages']
-    response = llm.bind_tools(tech_support_tools).invoke(messages)
+    messages = state.get('messages', [])
+    full_messages = [SystemMessage(content=system_msg)] + get_recent_messages(messages)
+    response = llm.bind_tools(tech_support_tools).invoke(full_messages)
     
     next_action = 'escalation' if response.content and 'ESCALATE_TO_HUMAN' in response.content else 'tech_support'
     
@@ -118,8 +122,9 @@ Review the conversation history to understand what information has already been 
 Provide clear order updates. Ask if they need more information.
 If customer is unsatisfied or wants human support, respond exactly with: "ESCALATE_TO_HUMAN" """
     
-    messages = [SystemMessage(content=system_msg)] + state['messages']
-    response = llm.bind_tools(order_inquiry_tools).invoke(messages)
+    messages = state.get('messages', [])
+    full_messages = [SystemMessage(content=system_msg)] + get_recent_messages(messages)
+    response = llm.bind_tools(order_inquiry_tools).invoke(full_messages)
     
     next_action = 'escalation' if response.content and 'ESCALATE_TO_HUMAN' in response.content else 'order_inquiry'
     
